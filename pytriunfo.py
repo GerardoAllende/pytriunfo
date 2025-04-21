@@ -13,6 +13,7 @@ import fitz
 
 
 # --- Configuration ---
+# --- You may need to change the config below---
 IMAP_SERVER = (
     "imap.gmail.com"  # Replace with your IMAP server address (e.g., imap.gmail.com)
 )
@@ -20,6 +21,8 @@ EMAIL_ADDRESS = "user"  # Replace with your email address or IMAP user
 PASSWORD = "pass"  # Replace with your email password
 # The mailbox to check (e.g., "INBOX", "Sent") If spaces in name, use "" i.e.: '"mail box"'
 MAILBOX = 'INBOX/Some'
+
+# --- You may not need to change the config below ---
 SENDER_DOMAIN = "triunfoseguros"  # The domain to filter emails from
 DATABASE_FILE = "data.db"
 global_templates = {}
