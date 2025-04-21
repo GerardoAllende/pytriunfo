@@ -7,7 +7,7 @@ Esta utilidad se conecta por IMAP a una carpeta de mails, busca correos de Triun
 
 Uso:
 ----
-Primero editar pytriunfo.py y cambiar la configuración de servidor IMAP, usuario, contraseña y carpeta IMAP.
+Primero editar pytriunfo.py y cambiar la configuración de servidor IMAP, usuario, contraseña y carpeta.
 
 Procesar mails:
 ---------------
