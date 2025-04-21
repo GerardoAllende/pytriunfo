@@ -5,6 +5,13 @@ Triunfo seguros me envía pólizas por mail pero no las adjunta, en cambio enví
 
 Esta utilidad se conecta por IMAP a una carpeta de mails, busca correos de Triunfo y descarga los archivos, los guarda en una base de datos de sqlite de forma eficiente porque hace diff binario contra el primer PDF así solamente guarda los cambios. Luego marca los mails como procesados para que la próxima vez no los tenga en cuenta. 
 
+Usa la librería pymupdf para leer la patente y fecha del contenido del PDF y usa estos datos para el nombre del PDF cuando se hace --extract. Además usa esa librería para descomprimir los streams del PDF (salvo imágenes o fuentes) para que sea más eficiente el diff y los vuelve a comprimir cuando hace --extract.
+
+Requisitos:
+-----------
+* Python 3
+* pip install -r requirements.txt
+
 Uso:
 ----
 Primero editar pytriunfo.py y cambiar la configuración de servidor IMAP, usuario, contraseña y carpeta.
