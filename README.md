@@ -6,6 +6,8 @@ Triunfo seguros me envía pólizas por mail pero no las adjunta, en cambio enví
 Esta utilidad se conecta por IMAP a una carpeta de mails, busca correos de Triunfo y descarga los archivos, los guarda en una base de datos de sqlite de forma eficiente porque hace diff binario contra el primer PDF así solamente guarda los cambios. Luego marca los mails como procesados para que la próxima vez no los tenga en cuenta. 
 
 Uso:
+----
+Primero editar pytriunfo.py y cambiar la configuración de servidor IMAP, usuario, contraseña y carpeta IMAP.
 
 Procesar mails:
 ---------------
