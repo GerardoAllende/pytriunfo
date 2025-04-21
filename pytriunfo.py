@@ -69,6 +69,7 @@ def get_cached_content(url):
         conn.close()
         return json.loads(result[0].decode()) if result else []
     if result is None:
+        conn.close()
         return None
     # ----
     # If url is a PDF
