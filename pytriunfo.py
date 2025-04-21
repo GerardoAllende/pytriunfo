@@ -378,5 +378,5 @@ if __name__ == "__main__":
     if "--extract" in sys.argv:
         extract_files()
     else:
-        # ~ fetch_and_scan_emails()
-        convertdb()
+        fetch_and_scan_emails()
+        # ~ convertdb()
