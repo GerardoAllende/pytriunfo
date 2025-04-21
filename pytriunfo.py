@@ -350,36 +350,8 @@ def extract_files(dest_folder="extracted_pdfs"):
     conn.close()
 
 
-def convertdb():
-    conn = sqlite3.connect(DATABASE_FILE)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT url, content FROM fetched_content WHERE url LIKE 'https://www.triunfonet.com.ar/gauswebtriunfo/servlet%' order by rowid"
-    )
-    number = 0
-
-    results = cursor.fetchall()
-    if results is None:
-        return
-    for result in results:
-        number += 1
-        url = result[0]
-        doc = None
-        content = result[1]
-        if not content:
-            continue
-        # ~ try:
-            # ~ doc = fitz.open(stream=content, filetype="pdf")
-        # ~ except:
-            # ~ breakpoint()
-        cache_content(url, content)
-        # ~ doc.close()
-    conn.close()
-
-
 if __name__ == "__main__":
     if "--extract" in sys.argv:
         extract_files()
     else:
         fetch_and_scan_emails()
-        # ~ convertdb()
