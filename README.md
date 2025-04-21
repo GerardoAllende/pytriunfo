@@ -12,7 +12,7 @@ La idea colocar este programa en un cron o tareas de windows para que se ejecute
 Requisitos:
 -----------
 * Python 3
-* pip install -r requirements.txt
+* ```pip install -r requirements.txt```
 
 Uso:
 ----
@@ -20,8 +20,12 @@ Primero editar pytriunfo.py y cambiar la configuración de servidor IMAP, usuari
 
 Procesar mails:
 ---------------
+```
 py pytruinfo.py
+```
 
 Extraer PDFs desde la base de datos al disco:
 ---------------------------------------------
+```
 py pytriunfo.py --extract
+```
