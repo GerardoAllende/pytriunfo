@@ -19,13 +19,11 @@ Uso:
 Primero editar pytriunfo.py y cambiar la configuración de servidor IMAP, usuario, contraseña y carpeta.
 
 Procesar mails:
----------------
 ```
 py pytruinfo.py
 ```
 
 Extraer PDFs desde la base de datos al disco:
----------------------------------------------
 ```
 py pytriunfo.py --extract
 ```
