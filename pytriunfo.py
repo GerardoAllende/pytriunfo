@@ -10,7 +10,7 @@ import sys
 import json
 import bsdiff4
 import fitz
-
+import os
 
 # --- Configuration ---
 # --- You may need to change the config below---
@@ -28,7 +28,7 @@ DATABASE_FILE = "data.db"
 global_templates = {}
 SELECT_CONTENT = "SELECT content FROM fetched_content WHERE url = ?"
 INSERT = (
-    "INSERT OR REPLACE INTO fetched_content (url, content, fetch_time) VALUES (?, ?, ?)"
+    "INSERT OR IGNORE INTO fetched_content (url, filename, content, fetch_time) VALUES (?, ?, ?, ?)"
 )
 REGEX_PDFURL = r"https://www.triunfonet.com.ar/gauswebtriunfo/servlet/(\w+)\?"
 
@@ -115,7 +115,7 @@ def cache_content(url, content):
     global global_templates
     decompressed = None
     if url.startswith("https://l.triunfonet.com.ar/"):
-        cursor.execute(INSERT, (url, json.dumps(content).encode(), time.time()))
+        cursor.execute(INSERT, (url, None, json.dumps(content).encode(), time.time()))
         conn.commit()
         conn.close()
         return
@@ -124,6 +124,7 @@ def cache_content(url, content):
     r = re.search(REGEX_PDFURL, url)
     if r:
         urltype = r[1]
+        name = None
         template = global_templates.get(urltype)
         if not template:
             # See if we have a template in db
@@ -134,8 +135,10 @@ def cache_content(url, content):
                 # decompress PDF streams (not images nor fonts)
                 p = fitz.open(stream=content, filetype="pdf")
                 decompressed = p.write(expand=1, deflate_images=True, deflate_fonts=True)
+                if '/hpoliza' in url:
+                    name = get_name_poliza(p)[1]
                 p.close()
-                cursor.execute(INSERT, (urltype, decompressed, time.time()))
+                cursor.execute(INSERT, (urltype, None, decompressed, time.time()))
                 res = decompressed
             else:
                 res = result[0]
@@ -146,12 +149,15 @@ def cache_content(url, content):
             # decompress PDF streams (not images nor fonts)
             p = fitz.open(stream=content, filetype="pdf")
             decompressed = p.write(expand=1, deflate_images=True, deflate_fonts=True)
+            if '/hpoliza' in url:
+                name = get_name_poliza(p)[1]
+                url += name
             p.close()
         content = decompressed
         # diff the template with the content
         d = bsdiff4.diff(template, content)
         # save it
-        cursor.execute(INSERT, (url, d, time.time()))
+        cursor.execute(INSERT, (url, name, d, time.time()))
         conn.commit()
         conn.close()
     # else: we don't save other kinds of url
@@ -274,8 +280,73 @@ def fetch_and_scan_emails():
         # print(f"An error occurred: {e}")
         raise
 
+def get_name_poliza(doc):
+    folder = "pólizas"
+    # name
+    page = doc[0]
+    h = page.rect.height
+    num_fac = page.get_text("text", clip=(114, h - 668, 182, h - 654)).strip()
+    patente = page.get_text("text", clip=(439, h - 510, 501, h - 491)).strip()
+    suplemento = page.get_text(
+        "text", clip=(170, h - 631, 203, h - 619)
+    ).strip()
+    fecha = re.findall(
+        r"\d+", page.get_text("text", clip=((148.67, 250.00, 215.33, 270.67)))
+    )
+    name = "_".join([f'{fecha[2]}-{fecha[1]}@{fecha[5]}-{fecha[4]}',
+                     num_fac, suplemento, patente])
+    return folder, name
 
-def extract_files(dest_folder="extracted_pdfs"):
+def extract_file(url, return_bytes=False):
+    doc = None
+    content = get_cached_content(url)
+    if not content:
+        print("No content at URL:" + url)
+        return None, None
+    doc = fitz.open(stream=content, filetype="pdf")
+    if "hpoliza" in url:
+        folder, name = get_name_poliza(doc)
+    elif "tarjetacir" in url:
+        folder = "tarjetas_circulación"
+        # name
+        page = doc[0]
+        h = page.rect.height
+        patente = page.get_text("text", clip=(112, h - 151, 234, h - 134)).strip()
+        fecha = re.findall(
+            r"\d+", page.get_text("text", clip=(228, h - 243, 327, h - 224))
+        )
+        fecha.reverse()
+        name = "_".join(("-".join(fecha), patente))
+    elif "tarjetaver" in url:
+        folder = "tarjetas_verdes"
+        # name
+        page = doc[0]
+        h = page.rect.height
+        patente = page.get_text("text", clip=(64, h - 303, 181, h - 291)).strip()
+        fecha = re.findall(
+            r"\d+", page.get_text("text", clip=(146, h - 354, 223, h - 342))
+        )
+        fecha.reverse()
+        fecha[1] = fecha[1].zfill(2)
+        fecha[2] = fecha[2].zfill(2)
+        name = "_".join(("-".join(fecha), patente))
+    else:
+        folder = "otros"
+        name = str(number)
+    path = Path("extracted_pdfs").joinpath(folder)
+    if not return_bytes:
+        path.mkdir(parents=True, exist_ok=True)
+    if doc:
+        fullname = path.joinpath(name + ".pdf").as_posix()
+        if not return_bytes:
+            with open(fullname, "wb") as filew:
+                filew.write(content)
+        else: # if return_bytes:
+            return name, content
+        doc.close()
+
+
+def extract_files():
     """Extract cached PDFs to folder"""
     conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
@@ -288,71 +359,28 @@ def extract_files(dest_folder="extracted_pdfs"):
         result = cursor.fetchone()
         if result is None:
             break
-        number += 1
-        url = result[0]
-        doc = None
-        content = get_cached_content(url)
-        if not content:
-            continue
-        doc = fitz.open(stream=content, filetype="pdf")
-        if "hpoliza" in url:
-            folder = "pólizas"
-            # name
-            page = doc[0]
-            h = page.rect.height
-            num_fac = page.get_text("text", clip=(114, h - 668, 182, h - 654)).strip()
-            patente = page.get_text("text", clip=(439, h - 510, 501, h - 491)).strip()
-            suplemento = page.get_text(
-                "text", clip=(170, h - 631, 203, h - 619)
-            ).strip()
-            fecha = re.findall(
-                r"\d+", page.get_text("text", clip=(133, h - 575, 210, h - 563))
-            )
-            fecha.reverse()
-            name = "_".join(("-".join(fecha), num_fac, suplemento, patente))
-        elif "tarjetacir" in url:
-            folder = "tarjetas_circulación"
-            # name
-            page = doc[0]
-            h = page.rect.height
-            patente = page.get_text("text", clip=(112, h - 151, 234, h - 134)).strip()
-            fecha = re.findall(
-                r"\d+", page.get_text("text", clip=(228, h - 243, 327, h - 224))
-            )
-            fecha.reverse()
-            name = "_".join(("-".join(fecha), patente))
-        elif "tarjetaver" in url:
-            folder = "tarjetas_verdes"
-            # name
-            page = doc[0]
-            h = page.rect.height
-            patente = page.get_text("text", clip=(64, h - 303, 181, h - 291)).strip()
-            fecha = re.findall(
-                r"\d+", page.get_text("text", clip=(146, h - 354, 223, h - 342))
-            )
-            fecha.reverse()
-            fecha[1] = fecha[1].zfill(2)
-            fecha[2] = fecha[2].zfill(2)
-            name = "_".join(("-".join(fecha), patente))
-        else:
-            folder = "otros"
-            name = str(number)
-        path = Path(dest_folder).joinpath(folder)
-        path.mkdir(parents=True, exist_ok=True)
-
-        if doc:
-            with open(path.joinpath(name + ".pdf").as_posix(), "wb") as filew:
-                filew.write(content)
-            try:
-                doc.close()
-            except:
-                pass
-
+        extract_file(result[0])
     conn.close()
 
 
+def ingest(files):
+    "Add old pólizas to db"
+    for file in files:
+        if os.path.isdir(file):
+            pdf_files = [f for f in Path(file).rglob('*') if f.suffix.lower() == '.pdf']
+        else:
+            pdf_files = [Path(file)]
+        for f in pdf_files:
+            print(f)
+            with f.open("rb") as of:
+                content = of.read()
+                cache_content("https://www.triunfonet.com.ar/gauswebtriunfo/servlet/hpolizapd?--", content)
+
+
 if __name__ == "__main__":
-    if "--extract" in sys.argv:
+    if len(sys.argv) > 1 and sys.argv[1] == "--extract":
         extract_files()
+    elif len(sys.argv) > 1 and sys.argv[1] == "--ingest":
+        ingest(sys.argv[2:])
     else:
         fetch_and_scan_emails()
