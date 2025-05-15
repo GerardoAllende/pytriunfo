@@ -27,3 +27,8 @@ Extraer PDFs desde la base de datos al disco:
 ```
 py pytriunfo.py --extract
 ```
+
+Generar una planilla de Excel con los datos de las pólizas:
+```
+py pytriunfo.py --excel
+```
