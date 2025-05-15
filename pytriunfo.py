@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 import requests
 import sqlite3
 import time
+from datetime import date
 from pathlib import Path
 import sys
 import json
@@ -171,6 +172,7 @@ def fetch_and_filter_urls(session, url_to_fetch, find_urls=True):
     Args:
         session (requests.Session): The requests session object for connection pooling.
         url_to_fetch (str): The URL to retrieve content from.
+        find_urls (bool): Parse html content for URLs. If False, only cache content.
 
     Returns:
         list: A list of valid URLs found in the body of the fetched content,
@@ -280,7 +282,8 @@ def fetch_and_scan_emails():
         # print(f"An error occurred: {e}")
         raise
 
-def get_name_poliza(doc):
+def get_name_poliza(doc, excel=False):
+    """Parses a fitz PDF doc and extracts some important info"""
     folder = "pólizas"
     # name
     page = doc[0]
@@ -295,9 +298,62 @@ def get_name_poliza(doc):
     )
     name = "_".join([f'{fecha[2]}-{fecha[1]}@{fecha[5]}-{fecha[4]}',
                      num_fac, suplemento, patente])
-    return folder, name
+    if not excel:
+        return folder, name
+        
+    # excel
+    num_fac = safefloat(num_fac, thousands_sep=".")
+    
+    premio = page.get_text(
+        "text", clip=(134, 520, 190, 534)
+    ).strip()
+    premio = safefloat(premio, thousands_sep=".")
+    
+    prima = page.get_text(
+        "text", clip=(122, 415, 207, 424)
+    ).strip()
+    prima = safefloat(prima, thousands_sep=".")
+    
+    iva = page.get_text(
+        "text", clip=(122, 424, 207, 434)
+    ).strip()
+    iva = safefloat(iva, thousands_sep=".")
+    
+    af = page.get_text(
+        "text", clip=(162, 434, 204, 441)
+    ).strip()
+    af = safefloat(af, thousands_sep=".")
+    
+    iva_af = page.get_text(
+        "text", clip=(122, 444, 207, 450)
+    ).strip()
+    iva_af = safefloat(iva_af, thousands_sep=".")
 
-def extract_file(url, return_bytes=False):
+    sellos = page.get_text(
+        "text", clip=(122, 451, 206, 460)
+    ).strip()
+    sellos = safefloat(sellos, thousands_sep=".")
+    
+    otros_imp = page.get_text(
+        "text", clip=(122, 469, 206, 478)
+    ).strip()
+    otros_imp = safefloat(otros_imp, thousands_sep=".")
+    
+    otros_grv = page.get_text(
+        "text", clip=(122, 479, 206, 487)
+    ).strip()
+    otros_grv = safefloat(otros_grv, thousands_sep=".")
+    
+    cuotas_soc = page.get_text(
+        "text", clip=(122, 487, 206, 496)
+    ).strip()
+    cuotas_soc = safefloat(cuotas_soc, thousands_sep=".")
+    
+    return (fecha, num_fac, suplemento, patente, premio, prima, iva, af,
+            iva_af, sellos, otros_imp, otros_grv, cuotas_soc)
+
+def extract_file(url, return_bytes=False, excel=False):
+    """Save a file from a url or return the bytes of the file or return Excel data"""
     doc = None
     content = get_cached_content(url)
     if not content:
@@ -305,7 +361,12 @@ def extract_file(url, return_bytes=False):
         return None, None
     doc = fitz.open(stream=content, filetype="pdf")
     if "hpoliza" in url:
-        folder, name = get_name_poliza(doc)
+        if not excel:
+            folder, name = get_name_poliza(doc)
+        else:
+            datos = get_name_poliza(doc, excel)
+            doc.close()
+            return datos
     elif "tarjetacir" in url:
         folder = "tarjetas_circulación"
         # name
@@ -376,11 +437,130 @@ def ingest(files):
                 content = of.read()
                 cache_content("https://www.triunfonet.com.ar/gauswebtriunfo/servlet/hpolizapd?--", content)
 
+def cell2(ws, row=None, column=None, value=None, number_format=None, fill=None, font=None, 
+          align=None, col_width=None):
+    cell = ws.cell(row=row, column=column, value=value)
+    if fill:
+        cell.fill = fill
+    if font:
+        cell.font = font
+    if number_format:
+        cell.number_format = number_format
+    if align:
+        cell.alignment = align
+    if col_width:
+        ws.column_dimensions[cell.column_letter].width = col_width
+    return cell
+
+def sort_key_excel(item):
+    date_parts = item[0]
+    year = int(date_parts[2])
+    month = int(date_parts[1])
+    day = int(date_parts[0])
+    return (year, month, day)
+
+def safefloat(n, thousands_sep=","):
+    n = n.strip()
+    n2=""
+    if not n:
+        return ''
+    n1 = re.split(r'\s+',n)
+    for i in n1:
+        if i[-1].isnumeric():
+            n2 = i
+            break
+    if not n2:
+        return ''
+    # ~ try:
+    if thousands_sep==".":
+        r = float(n2.replace(thousands_sep,"").replace(",","."))
+    elif thousands_sep==",":
+        r = float(n2.replace(thousands_sep,""))
+    else:
+        r = ""
+    # ~ except:
+        # ~ r = ""
+    return r
+
+def excel():
+    """Generate an Excel sheet from the info in database"""
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT url FROM fetched_content WHERE url LIKE 'https://www.triunfonet.com.ar/gauswebtriunfo/servlet/hpolizapd%' order by rowid"
+    )
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    row = 0
+    datos = []
+    while True:
+        result = cursor.fetchone()
+        if result is None:
+            break
+        dato = extract_file(result[0], excel=True)
+        datos.append(dato)
+        
+    sorted_data = sorted(datos, key=sort_key_excel)
+     # ~ return (fecha, num_fac, suplemento, patente, premio, prima, iva, iva_af),
+            # ~ af, sellos, otros_imp, otros_grv, cuotas_soc)
+    bold = openpyxl.styles.Font(bold=True)
+    right = openpyxl.styles.Alignment(horizontal='right', textRotation=30)
+    left = openpyxl.styles.Alignment(horizontal='left', textRotation=30)
+    center = openpyxl.styles.Alignment(horizontal='center', textRotation=30)
+    
+    row = 1
+    cell2(ws, row, 1, 'Fecha desde', font=bold, align=left)
+    cell2(ws, row, 2, 'Fecha hasta', font=bold, align=left)
+    cell2(ws, row, 3, 'Número póliza', font=bold, align=left)
+    cell2(ws, row, 4, 'Suplemento', font=bold, align=left)
+    cell2(ws, row, 5, 'Patente', font=bold, align=left)
+    cell2(ws, row, 6, 'Total pagado', font=bold, align=left)
+    cell2(ws, row, 7, 'Prima', font=bold, align=left)
+    cell2(ws, row, 8, 'IVA', font=bold, align=left)
+    cell2(ws, row, 9, 'Adic. Financiero', font=bold, align=left)
+    cell2(ws, row, 10, 'IVA Adic. Financ.', font=bold, align=left)
+    cell2(ws, row, 11, 'Sellos', font=bold, align=left)
+    cell2(ws, row, 12, 'Otros Imp.', font=bold, align=left)
+    cell2(ws, row, 13, 'Otros Grav.', font=bold, align=left)
+    cell2(ws, row, 14, 'Cuotas sociales', font=bold, align=left)
+   
+    for dato in sorted_data:
+        # ~ print (dato)
+        # ~ breakpoint()
+        row += 1
+        fecha_desde = dato[0][:3]
+        fecha_desde.reverse()
+        fecha_desde = "-".join(fecha_desde)
+        
+        fecha_hasta = dato[0][3:]
+        fecha_hasta.reverse()
+        fecha_hasta = "-".join(fecha_hasta)
+        
+        cell2(ws, row, 1, date.fromisoformat(fecha_desde), number_format='DD/MM/YYYY', col_width=11)
+        cell2(ws, row, 2, date.fromisoformat(fecha_hasta), number_format='DD/MM/YYYY', col_width=11)
+        cell2(ws, row, 3, dato[1], number_format = '#,##', col_width=11) #num
+        cell2(ws, row, 4, int(dato[2]) if dato[2] else None, col_width=4) #sup
+        cell2(ws, row, 5, dato[3], col_width=11) #pat
+        cell2(ws, row, 6, dato[4], number_format = '#,##0.00', col_width=11) #prem
+        cell2(ws, row, 7, dato[5], number_format = '#,##0.00', col_width=11) #prima
+        cell2(ws, row, 8, dato[6], number_format = '#,##0.00', col_width=11) #iva
+        cell2(ws, row, 9, dato[7], number_format = '#,##0.00', col_width=11) #af
+        cell2(ws, row, 10, dato[8], number_format = '#,##0.00', col_width=11) #ivaaf
+        cell2(ws, row, 11, dato[9], number_format = '#,##0.00', col_width=11) #sellos
+        cell2(ws, row, 12, dato[10], number_format = '#,##0.00', col_width=11) #oi
+        cell2(ws, row, 13, dato[11], number_format = '#,##0.00', col_width=11) #og
+        cell2(ws, row, 14, dato[12], number_format = '#,##0.00', col_width=11) #cuotas
+    ws.freeze_panes = 'A2'
+    wb.save("datos.xlsx") 
+    conn.close()
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--extract":
         extract_files()
     elif len(sys.argv) > 1 and sys.argv[1] == "--ingest":
         ingest(sys.argv[2:])
+    elif len(sys.argv) > 1 and sys.argv[1] == "--excel":
+        excel()
     else:
         fetch_and_scan_emails()
