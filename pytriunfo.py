@@ -568,7 +568,6 @@ def main():
         ingest(sys.argv[2:])
     elif len(sys.argv) > 1 and sys.argv[1] == "--excel":
         excel()
-        print("hola")
     else:
         fetch_and_scan_emails()
 
