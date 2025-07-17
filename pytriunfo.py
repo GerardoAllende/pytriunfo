@@ -12,6 +12,7 @@ import json
 import bsdiff4
 import fitz
 import os
+import openpyxl
 
 # --- Configuration ---
 # --- You may need to change the config below---
@@ -32,6 +33,12 @@ INSERT = (
     "INSERT OR IGNORE INTO fetched_content (url, filename, content, fetch_time) VALUES (?, ?, ?, ?)"
 )
 REGEX_PDFURL = r"https://www.triunfonet.com.ar/gauswebtriunfo/servlet/(\w+)\?"
+
+BOLD = openpyxl.styles.Font(bold=True)
+NORMAL = openpyxl.styles.Font(bold=False)
+RIGTH = openpyxl.styles.Alignment(horizontal='right', textRotation=30)
+LEFT = openpyxl.styles.Alignment(horizontal='left', textRotation=30)
+CENTER = openpyxl.styles.Alignment(horizontal='center', textRotation=30)
 
 def is_valid_url(url):
     """Checks if a string is a potentially valid URL."""
@@ -441,7 +448,7 @@ def ingest(files):
                 content = of.read()
                 cache_content("https://www.triunfonet.com.ar/gauswebtriunfo/servlet/hpolizapd?--", content)
 
-def cell2(ws, row=None, column=None, value=None, number_format=None, fill=None, font=None, 
+def cell2(ws, row=None, column=None, value=None, number_format=None, fill=None, font=BOLD, 
           align=None, col_width=None):
     cell = ws.cell(row=row, column=column, value=value)
     if fill:
@@ -493,7 +500,6 @@ def excel():
     cursor.execute(
         "SELECT url FROM fetched_content WHERE url LIKE 'https://www.triunfonet.com.ar/gauswebtriunfo/servlet/hpolizapd%' order by rowid"
     )
-    import openpyxl
     wb = openpyxl.Workbook()
     ws = wb.active
     row = 0
@@ -508,26 +514,22 @@ def excel():
     sorted_data = sorted(datos, key=sort_key_excel)
      # ~ return (fecha, num_fac, suplemento, patente, premio, prima, iva, iva_af),
             # ~ af, sellos, otros_imp, otros_grv, cuotas_soc)
-    bold = openpyxl.styles.Font(bold=True)
-    right = openpyxl.styles.Alignment(horizontal='right', textRotation=30)
-    left = openpyxl.styles.Alignment(horizontal='left', textRotation=30)
-    center = openpyxl.styles.Alignment(horizontal='center', textRotation=30)
     
     row = 1
-    cell2(ws, row, 1, 'Fecha desde', font=bold, align=left)
-    cell2(ws, row, 2, 'Fecha hasta', font=bold, align=left)
-    cell2(ws, row, 3, 'Número póliza', font=bold, align=left)
-    cell2(ws, row, 4, 'Suplemento', font=bold, align=left)
-    cell2(ws, row, 5, 'Patente', font=bold, align=left)
-    cell2(ws, row, 6, 'Total pagado', font=bold, align=left)
-    cell2(ws, row, 7, 'Prima', font=bold, align=left)
-    cell2(ws, row, 8, 'IVA', font=bold, align=left)
-    cell2(ws, row, 9, 'Adic. Financiero', font=bold, align=left)
-    cell2(ws, row, 10, 'IVA Adic. Financ.', font=bold, align=left)
-    cell2(ws, row, 11, 'Sellos', font=bold, align=left)
-    cell2(ws, row, 12, 'Otros Imp.', font=bold, align=left)
-    cell2(ws, row, 13, 'Otros Grav.', font=bold, align=left)
-    cell2(ws, row, 14, 'Cuotas sociales', font=bold, align=left)
+    cell2(ws, row, 1, 'Fecha desde', font=BOLD, align=LEFT)
+    cell2(ws, row, 2, 'Fecha hasta', font=BOLD, align=LEFT)
+    cell2(ws, row, 3, 'Número póliza', font=BOLD, align=LEFT)
+    cell2(ws, row, 4, 'Suplemento', font=BOLD, align=LEFT)
+    cell2(ws, row, 5, 'Patente', font=BOLD, align=LEFT)
+    cell2(ws, row, 6, 'Total pagado', font=BOLD, align=LEFT)
+    cell2(ws, row, 7, 'Prima', font=BOLD, align=LEFT)
+    cell2(ws, row, 8, 'IVA', font=BOLD, align=LEFT)
+    cell2(ws, row, 9, 'Adic. Financiero', font=BOLD, align=LEFT)
+    cell2(ws, row, 10, 'IVA Adic. Financ.', font=BOLD, align=LEFT)
+    cell2(ws, row, 11, 'Sellos', font=BOLD, align=LEFT)
+    cell2(ws, row, 12, 'Otros Imp.', font=BOLD, align=LEFT)
+    cell2(ws, row, 13, 'Otros Grav.', font=BOLD, align=LEFT)
+    cell2(ws, row, 14, 'Cuotas sociales', font=BOLD, align=LEFT)
    
     for dato in sorted_data:
         # ~ print (dato)
@@ -559,12 +561,16 @@ def excel():
     wb.save("datos.xlsx") 
     conn.close()
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--extract":
         extract_files()
     elif len(sys.argv) > 1 and sys.argv[1] == "--ingest":
         ingest(sys.argv[2:])
     elif len(sys.argv) > 1 and sys.argv[1] == "--excel":
         excel()
+        print("hola")
     else:
         fetch_and_scan_emails()
+
+if __name__ == "__main__":
+    main()
