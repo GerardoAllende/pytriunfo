@@ -234,7 +234,11 @@ def fetch_and_scan_emails():
     try:
         mail = imaplib.IMAP4_SSL(IMAP_SERVER)
         mail.login(EMAIL_ADDRESS, PASSWORD)
-        mail.select(MAILBOX)
+        result = mail.select(MAILBOX)
+        if result[0] != 'OK':
+            mail.logout()
+            print (result[1])
+            return -1
         session = requests.Session()
         create_cache_table()
 
