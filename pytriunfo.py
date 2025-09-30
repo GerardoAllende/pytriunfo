@@ -13,6 +13,7 @@ import bsdiff4
 import fitz
 import os
 import openpyxl
+import hashlib 
 
 # --- Configuration ---
 # --- You may need to change the config below---
@@ -39,6 +40,8 @@ NORMAL = openpyxl.styles.Font(bold=False)
 RIGTH = openpyxl.styles.Alignment(horizontal='right', textRotation=30)
 LEFT = openpyxl.styles.Alignment(horizontal='left', textRotation=30)
 CENTER = openpyxl.styles.Alignment(horizontal='center', textRotation=30)
+
+DATE_FILTER_SINCE = None #'01-Aug-2025'
 
 def is_valid_url(url):
     """Checks if a string is a potentially valid URL."""
@@ -199,12 +202,13 @@ def fetch_and_filter_urls(session, url_to_fetch, find_urls=True):
             content = response.content
             end_time = time.time()
             print(
-                f"Fetched '{url_to_fetch}' in {end_time - start_time:.2f} seconds and cached."
+                f"Fetched '{url_to_fetch}' in {end_time - start_time:.2f} seconds."
             )
             if find_urls:
                 # we save a JSON array of PDF URLs
                 found_urls = find_urls_in_text_javascript(content.decode())
-                cache_content(url_to_fetch, found_urls)
+                if found_urls:
+                    cache_content(url_to_fetch, found_urls)
             else:
                 # PDF
                 cache_content(url_to_fetch, content)
@@ -219,7 +223,7 @@ def fetch_and_filter_urls(session, url_to_fetch, find_urls=True):
 def find_urls_in_text(text):
     """Finds potential URLs within a text string using regex."""
     url_pattern = re.compile(
-        r"https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*(),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+        r"https?://[^\s<>\[\]\"\']+"
     )
     potential_urls = url_pattern.findall(text)
     valid_urls = [url for url in potential_urls if is_valid_url(url)]
@@ -230,7 +234,6 @@ def find_urls_in_text_javascript(text):
     """Finds javascript:self.abre(*) URLs within a text string using regex."""
     url_pattern = re.compile(r"javascript:self.abre\('(.+)'\)")
     potential_urls = url_pattern.findall(text)
-    print(potential_urls)
     valid_urls = [url for url in potential_urls if is_valid_url(url)]
     return valid_urls
 
@@ -249,9 +252,17 @@ def fetch_and_scan_emails():
         session = requests.Session()
         create_cache_table()
 
+        search_criteria = [f'FROM "{SENDER_DOMAIN}"', "UNKEYWORD", "PROCESSED"]
+
+        # Add SINCE criteria if a date is configured
+        if DATE_FILTER_SINCE:
+            search_criteria.append("SINCE")
+            search_criteria.append(DATE_FILTER_SINCE)
+
         status, email_ids = mail.search(
-            None, f'FROM "{SENDER_DOMAIN}"', "UNKEYWORD", "PROCESSED"
+            None, *search_criteria
         )
+        
         if status == "OK":
             for email_id in email_ids[0].split():
                 body = None
@@ -362,6 +373,12 @@ def get_name_poliza(doc, excel=False):
     
     return (fecha, num_fac, suplemento, patente, premio, prima, iva, af,
             iva_af, sellos, otros_imp, otros_grv, cuotas_soc)
+            
+def file_save(name, content):
+    if os.path.exists(name):
+        return
+    with open(name, "wb") as filew:
+        filew.write(content)
 
 def extract_file(url, return_bytes=False, excel=False):
     """Save a file from a url or return the bytes of the file or return Excel data"""
@@ -371,6 +388,9 @@ def extract_file(url, return_bytes=False, excel=False):
         print("No content at URL:" + url)
         return None, None
     doc = fitz.open(stream=content, filetype="pdf")
+    if not doc:
+        print("Error on fitz.open at URL:" + url)
+        return None, None
     if "hpoliza" in url:
         if not excel:
             folder, name = get_name_poliza(doc)
@@ -408,14 +428,13 @@ def extract_file(url, return_bytes=False, excel=False):
     path = Path("extracted_pdfs").joinpath(folder)
     if not return_bytes:
         path.mkdir(parents=True, exist_ok=True)
-    if doc:
-        fullname = path.joinpath(name + ".pdf").as_posix()
-        if not return_bytes:
-            with open(fullname, "wb") as filew:
-                filew.write(content)
-        else: # if return_bytes:
-            return name, content
-        doc.close()
+    #if doc: (doc is not None here)
+    fullname = path.joinpath(name + ".pdf").as_posix()
+    if not return_bytes:
+        file_save(fullname, content)
+    else:
+        return name, content
+    doc.close()
 
 
 def extract_files():
