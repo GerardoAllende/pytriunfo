@@ -1,3 +1,5 @@
+Nota: Esto ya no funciona porque Triunfo puso una protección Anti Bot de Clouflare. Lo resolví usando un browser con pywright pero no voy a subir el código nuevo porque no quiero que sigan poniendo más trabas. Dejo el código viejo para referencia nomás.
+
 Utilidad para procesar mails con pólizas de Triunfo Seguros
 ===========================================================
 
